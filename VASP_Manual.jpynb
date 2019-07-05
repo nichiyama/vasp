@@ -1,0 +1,328 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# VASP マニュアル"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## author:　森下　慎也"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "このマニュアルは今後VASPを用いて第一原理計算をおこなう学生さんに向けたものです．素人ながらに色々と知っていったことをまとめておきます．誰かの助けになれば幸いです．まずはどのようにして計算をおこなっていくのかを記述していきます．先生の手法とは少し違いますので，どちらを使うかはお好みでどうぞ．"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 計算に使用する環境構築"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "まずは，先輩にお願いしてasuraのアカウントを作ってもらいましょう．\n",
+    "作ってもらえたのであれば，その名前を使ってasuraにログインしましょう．\n",
+    "```ruby\n",
+    "ssh csl@asura0\n",
+    "#cslは僕が使っているユーザー名なので各自変更してください．\n",
+    "```\n",
+    "僕が使っている計算では，\n",
+    "1.submit_code\n",
+    "1.working\n",
+    "という２つのディレクトリに入っているファイル群が必要となります．\n",
+    "\n",
+    "以下のコマンドを実行することで自分のホームディレクトリに２つのディレクトリをコピーできます．\n",
+    "```ruby\n",
+    "cd\n",
+    "cp -rf ../csl/submit_code\n",
+    "cp -rf ../csl/working\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "## ユーザー名に関する書き換え．"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "ディレクトリを用意できたのであれば，次に自分が使用しているシェルに計算をおこなうためのコマンドを設定する必要があります．\n",
+    "\n",
+    "以下にはbashを使用する際のコマンドと書き換えの例を示しておきます．他のシェルを使用したい時にも大きな違いはないかと思いますので，参考にしてみてください．\n",
+    "```ruby\n",
+    "cd\n",
+    "cp ../csl/.bashrc\n",
+    "emacs .bashrc\n",
+    "```\n",
+    "\n",
+    "上のコマンドの最後でEmacsを用いて設定ファイルの編集を始めているので，以下の部分を書き換えてください．\n",
+    "```ruby\n",
+    "#書き換える前\n",
+    "alias vs=\"ruby /home/csl/submit_code/vaspsubmit.rb\"\n",
+    "\n",
+    "#書き換えた後\n",
+    "alias vs=\"ruby /home/自分のユーザー名/submit_code/vaspsubmit.rb\"\n",
+    "```\n",
+    "\n",
+    "以上の書き換えで最低限の動作ができるようになっていますが，Emacsに慣れている人はM-xでコマンドモードを使用し，\"query-replace\"と入力するとキーワード置換ができるので，\"csl\"を自分のユーザー名に書き換えると完全に自分専用として動かすことができます．\n",
+    "\n",
+    "以上で計算に必要な環境設定は完了です．"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 計算ファイルをasuraとやりとりする手順"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "まずは計算ファイルをasuraに送る必要があります．それにはscpというコマンドを使ってSSH接続により計算ファイルを送る必要があります．自分のPCからasuraにファイルを送信する場合には以下のコマンドで送信することができます．\n",
+    "```bash\n",
+    "scp ~/calc_file csl@asura0:~/\n",
+    "```\n",
+    "逆に計算結果の確認のためにasuraからファイルを受信する場合には以下のようなコマンドを実行します．\n",
+    "```bash\n",
+    "scp csl@asura0:~/calc_file ~/\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 実際に計算をおこなう手順"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "次に実際に計算を投げてみましょう．\n",
+    "\n",
+    "用意するのは以下のファイルです．\n",
+    "```ruby\n",
+    "[csl@asura0 initial]$ ls\n",
+    "INCAR  KPOINTS  OUTCAR  POSCAR　POTCAR\n",
+    "```\n",
+    "以下参考までにそれぞれのファイルの説明．\n",
+    "- INCARは計算条件がしてあるファイルです．僕の場合は過去の計算を参考にして作っていました．自分が初めて計算をおこなっていく場合にはE-Vカーブを作って，configurationに誤りがないかを確認する必要があります．\n",
+    "- KPOINTSはk-mesh法に基づいた，k点の取り方を記したファイルです．\n",
+    "- OUTCARは本来計算結果として出力されるファイルですが，VESTAを使用してモデルの確認をおこなう際に原子ごとに色付けがおこなわれるようになります．計算を回す時には削除することになります．\n",
+    "- POSCARは原子配置について記述されているファイルであり，結晶のサイズ，それぞれの原子の位置などが書かれています．\n",
+    "- POTCARはVASPの特徴としても挙げられる擬ポテンシャル法に使用するポテンシャルの情報が記載されているファイルです．\n",
+    "\n",
+    "これらのファイルが用意できたら，\n",
+    "```ruby\n",
+    "clean\n",
+    "```\n",
+    "というコマンドを実行して，計算に不要なファイルを削除してしまいましょう．この時，同じディレクトリに大事なファイルを置いていると一緒に削除される可能性があるので気を付けましょう．基本的には上記に書いてある計算に必要なファイルだけある状態に近づけておき，確認のためにcleanするというイメージがいいです．\n",
+    "\n",
+    "確認のためにディレクトリの中身を確認すると，以下のファイルが残るようになっているはずです．もし，余分なファイルが残っているようであれば，手動で削除してください．\n",
+    "```ruby\n",
+    "[csl@asura0 initial]$ ls\n",
+    "INCAR  KPOINTS  POSCAR　POTCAR\n",
+    "```\n",
+    "\n",
+    "それでは実際に計算を投げましょう．\n",
+    "\n",
+    "vsというコマンドを実行すると以下のような対話型インターフェースで計算に使用するCPUの設定をおこなうことになります．\n",
+    "\n",
+    "以下の例では8個のCPUを使用した\"sample\"という名前の計算をasura7でおこなうという設定にしています．\n",
+    "- CPUは８個ぐらいがオススメで，名前にはハイフン等，使えない文字も存在するので気を付けましょう．\n",
+    "\n",
+    "```ruby\n",
+    "[csl@asura0 1-calc]$ vs\n",
+    "Please type how many cores do you use for calclation  >>>>>  8\n",
+    "Please type this job name >>>>>  sample\n",
+    "queuename                      qtype resv/used/tot. load_avg arch          states\n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura1a                  BIP   0/0/8          1.16     linux-x64     \n",
+    "all.q@asura1b                  BIP   0/0/8          0.51     linux-x64     \n",
+    "all.q@asura2                   BIP   0/0/8          0.00     linux-x64     \n",
+    "all.q@asura3                   BIP   0/8/8          8.32     linux-x64     \n",
+    "all.q@asura4                   BIP   0/0/8          0.00     linux-x64     \n",
+    "all.q@asura5                   BIP   0/0/12         0.00     linux-x64     \n",
+    "all.q@asura6                   BIP   0/0/20         0.00     linux-x64     \n",
+    "all.q@asura7                   BIP   0/16/24        5.99     linux-x64     \n",
+    "Which asura do you want to calculate >>>>> asura7\n",
+    "\n",
+    "```\n",
+    "\n",
+    "これで，後は計算が終わるまで待つのみです．\n",
+    "\n",
+    "以下のように\"qs\"というコマンドを実行すると現在おこなわれている計算が表示されます．このリストから名前がなくなったら計算が終了しています．\n",
+    "```ruby\n",
+    "[csl@asura0 initial]$ qs\n",
+    "queuename                      qtype resv/used/tot. load_avg arch          states\n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura1a                  BIP   0/0/8          -NA-     linux-x64     au\n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura1b                  BIP   0/0/8          0.66     linux-x64     \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura2                   BIP   0/0/8          0.54     linux-x64     \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura3                   BIP   0/0/8          1.01     linux-x64     \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura4                   BIP   0/0/8          0.00     linux-x64     \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura5                   BIP   0/0/12         0.00     linux-x64     \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura6                   BIP   0/0/20         0.00     linux-x64     \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura7                   BIP   0/8/24         8.00     linux-x64     \n",
+    "   4429 0.55500 tochigi2   csl          r     11/01/2017 15:44:20     8        \n",
+    "---------------------------------------------------------------------------------\n",
+    "all.q@asura8                   BIP   0/8/8          8.00     linux-x64     \n",
+    "   4428 0.55500 tochigi1   csl          r     11/01/2017 15:43:17     8\n",
+    "```"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# 計算結果の確認"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "計算が終わるとディレクトリの中はこのようになっています．\n",
+    "\n",
+    "```ruby\n",
+    "[csl@asura0 1-calc]$ ls\n",
+    "CHG      DOSCAR    INCAR    OUTCAR  POTCAR   under1.e4290   under1.po4290\n",
+    "CHGCAR   EIGENVAL  KPOINTS  PCDAT   WAVECAR  under1.o4290   vasprun.xml\n",
+    "CONTCAR  IBZKPT    OSZICAR  POSCAR  XDATCAR  under1.pe4290\n",
+    "```\n",
+    "\n",
+    "計算結果として見るべきなのは，OUTCARです．OUTCARには計算結果を出力されるだけでなく，エラーが起きた場合にエラーの内容が表示されることがあります．ファイルの最後に以下のような記述がされていれば，計算が完了しています．エラーが出ている場合にはエラー文を読んで設定ファイルを見直してください．\n",
+    "\n",
+    "\n",
+    "\n",
+    "```ruby\n",
+    " reached required accuracy - stopping structural energy minimisation\n",
+    "     LOOP+:  VPU time 1089.92: CPU time 1089.49\n",
+    "\n",
+    "\n",
+    " General timing and accounting informations for this job:\n",
+    " ========================================================\n",
+    "\n",
+    "                  Total CPU time used (sec):    45248.809\n",
+    "                            User time (sec):    42966.317\n",
+    "                          System time (sec):     2282.492\n",
+    "                         Elapsed time (sec):    45235.212\n",
+    "\n",
+    "                   Maximum memory used (kb):     1263112.\n",
+    "                   Average memory used (kb):           0.\n",
+    "\n",
+    "                          Minor page faults:     19450082\n",
+    "                          Major page faults:            0\n",
+    "                 Voluntary context switches:        25542\n",
+    "```\n",
+    "\n",
+    "構造緩和をおこない，複数回投げるような計算の場合には計算後の原子配置を確認して，安定配置まで原子移動がおこなわれているかを確認する必要があります．\n",
+    "\n",
+    "```ruby\n",
+    "[csl@asura0 1-calc]$ ls\n",
+    "CHG      DOSCAR    INCAR    OUTCAR  POTCAR   under1.e4290   under1.po4290\n",
+    "CHGCAR   EIGENVAL  KPOINTS  PCDAT   WAVECAR  under1.o4290   vasprun.xml\n",
+    "CONTCAR  IBZKPT    OSZICAR  POSCAR  XDATCAR  under1.pe4290\n",
+    "```\n",
+    "\n",
+    "CONTCARに構造緩和後の原子配置の情報が入っています．これとPOSCARを比較することで構造緩和の余地があるかどうかを判断します.\n",
+    "以下のコマンドでファイルの比較をおこなうことができます．\n",
+    "\n",
+    "```ruby\n",
+    "diff CONTCAR POSCAR\n",
+    "```\n",
+    "何も表示がなければ，構造緩和の余地はもうないので計算は終了です．しかし，差分がずらずらと表示されている場合には計算を続行する必要があります．その場合には計算終了後の原子配置を次の計算の初期配置にして計算を再度投げる必要があります．ということで，今まで1-calcとしていた計算ディレクトリから次の2-calcというディレクトリを作成しましょう．\n",
+    "```ruby\n",
+    "cp -rf 1-calc 2-calc\n",
+    "```\n",
+    "\n",
+    "そして，実際にCONTCARの内容をコピーしてください．以下のコマンドでできます．\n",
+    "\n",
+    "```ruby\n",
+    "cd 2-calc\n",
+    "cp CONTCAR POSCAR\n",
+    "```\n",
+    "\n",
+    "ここから先はcleanの手順まで遡って再度計算を投げてください．"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": []
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {
+    "collapsed": true
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.6.4"
+  },
+  "toc": {
+   "base_numbering": 1,
+   "nav_menu": {},
+   "number_sections": true,
+   "sideBar": true,
+   "skip_h1_title": false,
+   "title_cell": "Table of Contents",
+   "title_sidebar": "Contents",
+   "toc_cell": false,
+   "toc_position": {},
+   "toc_section_display": true,
+   "toc_window_display": false
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 2
+}
